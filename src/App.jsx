@@ -14,6 +14,9 @@ const CURRENT_API_URL = import.meta.env.PROD
 const HISTORICAL_API_URL = "https://www.um.es/ws-siu/elecciones/elecciones_1v.php";
 const THEME_STORAGE_KEY = "recuento-theme";
 const GROUP_ORDER = ["A", "B", "C", "D"];
+const REPO_URL = "https://github.com/ivanmzcom/consultavotosumu";
+const OFFICIAL_RESULTS_URL =
+  "https://www.um.es/web/universidad/elecciones/2026/resultados-primera-vuelta";
 const OFFICIAL_CANDIDATE_ORDER = [
   { code: "C1", name: "Juan Samuel Baixauli Soler" },
   { code: "C2", name: "María Senena Corbalán García" },
@@ -510,6 +513,28 @@ function App() {
 
   const appClassName = `app-shell ${flash ? "is-flashing" : ""}`;
 
+  async function handleShare() {
+    const shareUrl = typeof window !== "undefined" ? window.location.href : REPO_URL;
+    const payload = {
+      title: "Resultados generales 1ª vuelta · Universidad de Murcia",
+      text: "Web no oficial para consultar el recuento de las elecciones UMU 2026.",
+      url: shareUrl
+    };
+
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        await navigator.share(payload);
+        return;
+      }
+
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+    } catch {
+      // No-op: cancelar compartir no debe romper la interfaz.
+    }
+  }
+
   return (
     <main className={appClassName}>
       <section className="hero flash-target">
@@ -540,6 +565,10 @@ function App() {
                 Directo
               </button>
             </div>
+
+            <button className="share-button" type="button" onClick={handleShare}>
+              Compartir
+            </button>
 
             <button
               className="theme-toggle"
@@ -964,6 +993,26 @@ function App() {
           </section>
         </>
       )}
+
+      <footer className="site-footer flash-target">
+        <div className="site-footer-copy">
+          <strong>Consultavotos UMU</strong>
+          <p>
+            Web no oficial creada por Iván Moreno. Consulta los mismos datos públicos que la web
+            oficial de resultados de la Universidad de Murcia.
+          </p>
+        </div>
+
+        <div className="site-footer-links">
+          <a href={REPO_URL} target="_blank" rel="noreferrer">
+            Repositorio en GitHub
+          </a>
+          <a href={OFFICIAL_RESULTS_URL} target="_blank" rel="noreferrer">
+            Web oficial de resultados
+          </a>
+          <span>© Iván Moreno</span>
+        </div>
+      </footer>
     </main>
   );
 }
