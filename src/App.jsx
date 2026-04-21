@@ -1,10 +1,19 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 
 const REFRESH_MS = 15_000;
-const API_URL = import.meta.env.PROD
+const CURRENT_API_URL = import.meta.env.PROD
   ? "https://www.um.es/ws-siu/elecciones/elecciones_2026_1v.php"
   : "/api/elections";
+const HISTORICAL_API_URL = "https://www.um.es/ws-siu/elecciones/elecciones_1v.php";
 const THEME_STORAGE_KEY = "recuento-theme";
+const GROUP_ORDER = ["A", "B", "C", "D"];
 const CANDIDATE_PHOTOS = {
   "Juan Samuel Baixauli Soler": "https://www.um.es/documents/d/universidad/samuel_baixauli_png",
   "María Senena Corbalán García": "https://www.um.es/documents/d/universidad/senena_corbalan_png-1",
@@ -37,23 +46,30 @@ function toNumber(value) {
 }
 
 function formatInteger(value) {
-  return new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 }).format(
-    toNumber(value)
-  );
+  return new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 }).format(toNumber(value));
 }
 
 function formatPercent(value) {
   return `${toNumber(value).toFixed(2).replace(".", ",")}%`;
 }
 
+function formatSignedPercent(value) {
+  const numeric = toNumber(value);
+  const sign = numeric > 0 ? "+" : "";
+  return `${sign}${numeric.toFixed(2).replace(".", ",")} pp`;
+}
+
 function normalizeCandidateResults(entries = []) {
   return entries
     .map((entry) => {
       const results = entry.ResultadosTotalesCandidato?.[0]?.ResultadosTotales ?? [];
+      const name = entry.NombreCandidato ?? results[0]?.Candidato ?? "Sin nombre";
+
       return {
-        name: entry.NombreCandidato ?? results[0]?.Candidato ?? "Sin nombre",
+        code: `C${entries.indexOf(entry) + 1}`,
+        name,
         value: toNumber(results[1]?.Valor),
-        photo: CANDIDATE_PHOTOS[entry.NombreCandidato ?? results[0]?.Candidato] ?? ""
+        photo: CANDIDATE_PHOTOS[name] ?? ""
       };
     })
     .sort((left, right) => right.value - left.value);
@@ -72,28 +88,6 @@ function normalizeResultsByGroup(entries = []) {
       })
       .sort((left, right) => right.value - left.value)
   }));
-}
-
-function normalizePollingTables(entries = []) {
-  return entries.map((table) => {
-    const rawResults = table.MesaElectoral?.ResultadosMesaElectoral ?? [];
-    const groups = [...new Set(rawResults.map((result) => String(result.GrupoVotantesCandidato).split(".")[0]))];
-    const totalVotes = rawResults.reduce((sum, result) => sum + toNumber(result.Valor), 0);
-
-    return {
-      name: table.NombreMesaElectoralElectoral,
-      counted: table.escrutada === "si",
-      groups,
-      totalVotes,
-      results: rawResults
-        .map((result) => ({
-          key: result.GrupoVotantesCandidato,
-          value: toNumber(result.Valor)
-        }))
-        .filter((result) => result.value > 0)
-        .sort((left, right) => right.value - left.value)
-    };
-  });
 }
 
 function normalizeParticipation(entries = []) {
@@ -120,47 +114,239 @@ function normalizeParticipation(entries = []) {
     .sort((left, right) => right.pctFinal - left.pctFinal);
 }
 
-function extractSummary(payload) {
-  const election = payload?.EleccionesRector2026;
+function normalizePollingTables(entries = [], participationByFaculty = []) {
+  const turnoutMap = new Map(participationByFaculty.map((item) => [item.name, item]));
+
+  return entries.map((table) => {
+    const rawResults = table.MesaElectoral?.ResultadosMesaElectoral ?? [];
+    const groups = [...new Set(rawResults.map((result) => String(result.GrupoVotantesCandidato).split(".")[0]))];
+    const totalVotes = rawResults.reduce((sum, result) => sum + toNumber(result.Valor), 0);
+    const participation = turnoutMap.get(table.NombreMesaElectoralElectoral);
+
+    return {
+      name: table.NombreMesaElectoralElectoral,
+      counted: table.escrutada === "si",
+      groups,
+      totalVotes,
+      turnoutPct: participation?.pctFinal ?? 0,
+      turnout14Pct: participation?.pct14h ?? 0,
+      results: rawResults
+        .map((result) => ({
+          key: result.GrupoVotantesCandidato,
+          rawValue: result.Valor,
+          value: toNumber(result.Valor)
+        }))
+        .filter((result) => result.value > 0)
+        .sort((left, right) => right.value - left.value)
+    };
+  });
+}
+
+function buildDetailedVotesTable(entries = [], candidateResults = []) {
+  const candidateColumns = candidateResults.map((candidate, index) => ({
+    code: `C${index + 1}`,
+    name: candidate.name,
+    photo: candidate.photo
+  }));
+  const extraColumns = [
+    { code: "W", name: "Blancos", photo: "" },
+    { code: "N", name: "Nulos", photo: "" }
+  ];
+  const columns = [...candidateColumns, ...extraColumns];
+
+  const totals = Object.fromEntries(
+    columns.map((column) => [column.code, Object.fromEntries(GROUP_ORDER.map((group) => [group, 0]))])
+  );
+
+  const rows = entries.map((entry) => {
+    const cellMap = Object.fromEntries(
+      columns.map((column) => [column.code, Object.fromEntries(GROUP_ORDER.map((group) => [group, ""]))])
+    );
+
+    for (const result of entry.MesaElectoral?.ResultadosMesaElectoral ?? []) {
+      const [group, rawCode] = String(result.GrupoVotantesCandidato).split(".");
+      const normalizedCode = group === "D" && rawCode?.startsWith("D") ? `C${rawCode.slice(1)}` : rawCode;
+
+      if (!(normalizedCode in cellMap) || !GROUP_ORDER.includes(group)) {
+        continue;
+      }
+
+      cellMap[normalizedCode][group] = result.Valor;
+      if (result.Valor !== "" && result.Valor != null) {
+        totals[normalizedCode][group] += toNumber(result.Valor);
+      }
+    }
+
+    return {
+      name: entry.NombreMesaElectoralElectoral,
+      counted: entry.escrutada === "si",
+      cells: cellMap
+    };
+  });
+
+  return { columns, rows, totals };
+}
+
+function extractElection(payload) {
+  const rootKey = Object.keys(payload ?? {}).find((key) => key.startsWith("EleccionesRector"));
+  const election = rootKey ? payload?.[rootKey] : null;
 
   if (!election) {
     return null;
   }
 
-  const turnout = election.VotoEscrutado?.[0] ?? {};
-  const liveTotals = election.ParticipacionTotal?.[0] ?? {};
+  const candidateResults = normalizeCandidateResults(election.ResultadosTotalesCandidatoGrafica);
+  const participationByFaculty = normalizeParticipation(election.ParticipacionFacultades ?? []);
 
   return {
+    year: rootKey.replace("EleccionesRector", ""),
     updatedAt: election.Actualizacion?.[0]?.UltimaActualizacion ?? "Sin dato",
-    countedPct: toNumber(turnout.PorcentajeTotalEscrutado),
-    totalCensus: toNumber(turnout.TotalCensados),
-    totalVotes: toNumber(turnout.TotalCensadosQueHanVotado),
-    turnoutPct: toNumber(liveTotals.ParticipaciongrupoTotal),
+    countedPct: toNumber(election.VotoEscrutado?.[0]?.PorcentajeTotalEscrutado),
+    totalCensus: toNumber(election.VotoEscrutado?.[0]?.TotalCensados),
+    totalVotes: toNumber(election.VotoEscrutado?.[0]?.TotalCensadosQueHanVotado),
+    turnoutPct: toNumber(election.ParticipacionTotal?.[0]?.ParticipaciongrupoTotal),
+    turnout14Pct: toNumber(election.ParticipacionTotal14?.[0]?.ParticipaciongrupoTotal),
+    turnoutByGroup: [
+      {
+        group: "Total",
+        current: toNumber(election.ParticipacionTotal?.[0]?.ParticipaciongrupoTotal),
+        at14h: toNumber(election.ParticipacionTotal14?.[0]?.ParticipaciongrupoTotal)
+      },
+      {
+        group: "PDI",
+        current: toNumber(election.ParticipacionPDI?.[0]?.ParticipaciongrupoPDI),
+        at14h: toNumber(election.ParticipacionPDI14?.[0]?.ParticipaciongrupoPDI)
+      },
+      {
+        group: "A",
+        current: toNumber(election.ParticipacionA?.[0]?.ParticipaciongrupoA),
+        at14h: toNumber(election.ParticipacionA14?.[0]?.ParticipaciongrupoA)
+      },
+      {
+        group: "B",
+        current: toNumber(election.ParticipacionB?.[0]?.ParticipaciongrupoB),
+        at14h: toNumber(election.ParticipacionB14?.[0]?.ParticipaciongrupoB)
+      },
+      {
+        group: "C",
+        current: toNumber(election.ParticipacionC?.[0]?.ParticipaciongrupoC),
+        at14h: toNumber(election.ParticipacionC14?.[0]?.ParticipaciongrupoC)
+      },
+      {
+        group: "D",
+        current: toNumber(election.ParticipacionD?.[0]?.ParticipaciongrupoD),
+        at14h: toNumber(election.ParticipacionD14?.[0]?.ParticipaciongrupoD)
+      }
+    ],
     lastCounted: (election.UltimasEscrutadas ?? []).filter((item) => item.NombreMesaElectoral),
-    candidateResults: normalizeCandidateResults(election.ResultadosTotalesCandidatoGrafica),
+    candidateResults,
     resultsByGroup: normalizeResultsByGroup(election.ResultadosTotalesCandidatoGraficaPorGrupo),
-    pollingTables: normalizePollingTables(election.ListadoMesaElectorales),
-    participationByFaculty: normalizeParticipation(election.ParticipacionFacultades)
+    participationByFaculty,
+    pollingTables: normalizePollingTables(election.ListadoMesaElectorales, participationByFaculty),
+    detailedVotesTable: buildDetailedVotesTable(election.ListadoMesaElectorales, candidateResults)
   };
 }
 
-function SummaryCard({ label, value, hint }) {
+function buildDataset(currentPayload, historicalPayload) {
+  const current = extractElection(currentPayload);
+  const historical = extractElection(historicalPayload);
+
+  if (!current) {
+    return null;
+  }
+
+  return { current, historical };
+}
+
+function getDelta(current, previous) {
+  if (previous == null) {
+    return null;
+  }
+
+  const delta = toNumber(current) - toNumber(previous);
+  return Math.abs(delta) < 0.005 ? null : delta;
+}
+
+function getLatestCandidateDelta(name, current, previousData) {
+  const previous = previousData?.current?.candidateResults?.find((candidate) => candidate.name === name);
+  return getDelta(current, previous?.value);
+}
+
+function formatCellValue(value) {
+  if (value === "" || value == null) {
+    return "";
+  }
+
+  return formatInteger(value);
+}
+
+function DeltaBadge({ value }) {
+  if (value == null) {
+    return null;
+  }
+
   return (
-    <article className="summary-card">
+    <span className={`delta-badge ${value > 0 ? "delta-up" : "delta-down"}`}>
+      {formatSignedPercent(value)}
+    </span>
+  );
+}
+
+function SummaryCard({ label, value, hint, delta }) {
+  return (
+    <article className="summary-card flash-target">
       <span className="summary-label">{label}</span>
       <strong className="summary-value">{value}</strong>
-      <span className="summary-hint">{hint}</span>
+      <div className="summary-meta">
+        <span className="summary-hint">{hint}</span>
+        <DeltaBadge value={delta} />
+      </div>
     </article>
+  );
+}
+
+function ComparisonRow({ label, current, previous, currentLabel, previousLabel }) {
+  const maxValue = Math.max(current, previous, 1);
+
+  return (
+    <div className="compare-row flash-target">
+      <div className="compare-head">
+        <strong>{label}</strong>
+        <DeltaBadge value={getDelta(current, previous)} />
+      </div>
+      <div className="compare-bars">
+        <div className="compare-bar-group">
+          <span>{currentLabel}</span>
+          <div className="compare-meter">
+            <div className="compare-meter-current" style={{ width: `${(current / maxValue) * 100}%` }} />
+          </div>
+          <strong>{formatPercent(current)}</strong>
+        </div>
+        <div className="compare-bar-group">
+          <span>{previousLabel}</span>
+          <div className="compare-meter">
+            <div className="compare-meter-previous" style={{ width: `${(previous / maxValue) * 100}%` }} />
+          </div>
+          <strong>{formatPercent(previous)}</strong>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function App() {
   const [data, setData] = useState(null);
+  const [previousData, setPreviousData] = useState(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [showCountedOnly, setShowCountedOnly] = useState(false);
+  const [showWithVotesOnly, setShowWithVotesOnly] = useState(false);
+  const [tableSort, setTableSort] = useState("alphabetical");
+  const [viewMode, setViewMode] = useState("full");
   const [theme, setTheme] = useState(getInitialTheme);
+  const [flash, setFlash] = useState(false);
+  const previousRef = useRef(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -170,26 +356,43 @@ function App() {
 
   useEffect(() => {
     let active = true;
+    let flashTimer;
 
     async function loadData() {
       try {
-        setStatus((current) => (current === "ready" ? "refreshing" : "loading"));
-        const response = await fetch(API_URL, { cache: "no-store" });
+        setStatus((currentStatus) => (currentStatus === "ready" ? "refreshing" : "loading"));
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+        const [currentResponse, historicalResponse] = await Promise.all([
+          fetch(CURRENT_API_URL, { cache: "no-store" }),
+          fetch(HISTORICAL_API_URL, { cache: "no-store" })
+        ]);
+
+        if (!currentResponse.ok || !historicalResponse.ok) {
+          throw new Error(`HTTP ${currentResponse.status}/${historicalResponse.status}`);
         }
 
-        const payload = await response.json();
+        const [currentPayload, historicalPayload] = await Promise.all([
+          currentResponse.json(),
+          historicalResponse.json()
+        ]);
+
         if (!active) {
           return;
         }
 
+        const dataset = buildDataset(currentPayload, historicalPayload);
+
         startTransition(() => {
-          setData(extractSummary(payload));
+          setPreviousData(previousRef.current);
+          setData(dataset);
+          previousRef.current = dataset;
           setError("");
           setStatus("ready");
+          setFlash(true);
         });
+
+        window.clearTimeout(flashTimer);
+        flashTimer = window.setTimeout(() => setFlash(false), 1000);
       } catch (loadError) {
         if (!active) {
           return;
@@ -206,16 +409,24 @@ function App() {
     return () => {
       active = false;
       window.clearInterval(timer);
+      window.clearTimeout(flashTimer);
     };
   }, []);
 
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
-  const filteredTables = useMemo(() => {
-    const tables = data?.pollingTables ?? [];
+  const current = data?.current;
+  const historical = data?.historical;
 
-    return tables.filter((table) => {
+  const filteredTables = useMemo(() => {
+    const tables = [...(current?.pollingTables ?? [])];
+
+    const filtered = tables.filter((table) => {
       if (showCountedOnly && !table.counted) {
+        return false;
+      }
+
+      if (showWithVotesOnly && table.totalVotes <= 0) {
         return false;
       }
 
@@ -225,42 +436,96 @@ function App() {
 
       return table.name.toLowerCase().includes(deferredQuery);
     });
-  }, [data?.pollingTables, deferredQuery, showCountedOnly]);
+
+    filtered.sort((left, right) => {
+      if (tableSort === "votes") {
+        return right.totalVotes - left.totalVotes;
+      }
+
+      if (tableSort === "turnout") {
+        return right.turnoutPct - left.turnoutPct;
+      }
+
+      if (tableSort === "counted") {
+        return Number(right.counted) - Number(left.counted) || left.name.localeCompare(right.name, "es");
+      }
+
+      return left.name.localeCompare(right.name, "es");
+    });
+
+    return filtered;
+  }, [current?.pollingTables, deferredQuery, showCountedOnly, showWithVotesOnly, tableSort]);
+
+  const filteredDetailedRows = useMemo(() => {
+    const rows = current?.detailedVotesTable?.rows ?? [];
+    return rows.filter((row) => {
+      if (showCountedOnly && !row.counted) {
+        return false;
+      }
+
+      if (!deferredQuery) {
+        return true;
+      }
+
+      return row.name.toLowerCase().includes(deferredQuery);
+    });
+  }, [current?.detailedVotesTable?.rows, deferredQuery, showCountedOnly]);
 
   const topFaculties = useMemo(
-    () => (data?.participationByFaculty ?? []).slice(0, 10),
-    [data?.participationByFaculty]
+    () => (current?.participationByFaculty ?? []).slice(0, 10),
+    [current?.participationByFaculty]
   );
 
+  const appClassName = `app-shell ${flash ? "is-flashing" : ""}`;
+
   return (
-    <main className="app-shell">
-      <section className="hero">
+    <main className={appClassName}>
+      <section className="hero flash-target">
         <div className="hero-copy">
           <p className="eyebrow">Elecciones a Rector/a y Claustro Universitario 2026</p>
           <h1>Resultados generales 1ª vuelta</h1>
           <p className="hero-text">
-            Universidad de Murcia. Consulta escrutinio, participación y detalle por mesa
-            en tiempo real.
+            Universidad de Murcia. Consulta escrutinio, participación, comparativa con 2022
+            y detalle completo por mesa en tiempo real.
           </p>
         </div>
 
         <div className="hero-side">
-          <button
-            className="theme-toggle"
-            type="button"
-            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-            aria-label={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
-          >
-            <span className="theme-toggle-label">Tema</span>
-            <strong>{theme === "dark" ? "Oscuro" : "Claro"}</strong>
-          </button>
+          <div className="hero-controls">
+            <div className="segmented-control">
+              <button
+                className={viewMode === "full" ? "segmented-active" : ""}
+                type="button"
+                onClick={() => setViewMode("full")}
+              >
+                Completa
+              </button>
+              <button
+                className={viewMode === "live" ? "segmented-active" : ""}
+                type="button"
+                onClick={() => setViewMode("live")}
+              >
+                Directo
+              </button>
+            </div>
+
+            <button
+              className="theme-toggle"
+              type="button"
+              onClick={() => setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"))}
+              aria-label={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
+            >
+              <span className="theme-toggle-label">Tema</span>
+              <strong>{theme === "dark" ? "Oscuro" : "Claro"}</strong>
+            </button>
+          </div>
 
           <div className="hero-panel">
             <span className={`status-dot status-${status}`} />
             <span>
               {status === "loading" && "Cargando datos"}
               {status === "refreshing" && "Actualizando"}
-              {status === "ready" && `Última actualización: ${data?.updatedAt ?? "sin dato"}`}
+              {status === "ready" && `Última actualización: ${current?.updatedAt ?? "sin dato"}`}
               {status === "error" && "Error de actualización"}
             </span>
           </div>
@@ -271,36 +536,38 @@ function App() {
 
       <section className="summary-grid">
         <SummaryCard
-          label="Escrutado"
-          value={data ? formatPercent(data.countedPct) : "—"}
-          hint="Porcentaje total de voto ya contado"
+          label="Voto escrutado"
+          value={current ? formatPercent(current.countedPct) : "—"}
+          hint="Porcentaje total de voto contado"
+          delta={getDelta(current?.countedPct, previousData?.current?.countedPct)}
         />
         <SummaryCard
           label="Participación"
-          value={data ? formatPercent(data.turnoutPct) : "—"}
+          value={current ? formatPercent(current.turnoutPct) : "—"}
           hint="Participación global acumulada"
+          delta={getDelta(current?.turnoutPct, previousData?.current?.turnoutPct)}
         />
         <SummaryCard
           label="Censo"
-          value={data ? formatInteger(data.totalCensus) : "—"}
+          value={current ? formatInteger(current.totalCensus) : "—"}
           hint="Total de personas censadas"
         />
         <SummaryCard
           label="Votos contabilizados"
-          value={data ? formatInteger(data.totalVotes) : "—"}
-          hint="Votos recogidos en el escrutinio actual"
+          value={current ? formatInteger(current.totalVotes) : "—"}
+          hint="Total de votos ya publicados"
         />
       </section>
 
       <section className="content-grid">
-        <article className="panel recent-panel">
+        <article className="panel">
           <div className="panel-heading">
             <h2>Resultado global</h2>
             <span>Distribución porcentual por candidatura</span>
           </div>
 
           <div className="ranking-list">
-            {(data?.candidateResults ?? []).map((candidate) => (
+            {(current?.candidateResults ?? []).map((candidate) => (
               <div className="ranking-row" key={candidate.name}>
                 <div className="ranking-main">
                   <div className="candidate-head">
@@ -312,7 +579,12 @@ function App() {
                         loading="lazy"
                       />
                     ) : null}
-                    <strong>{candidate.name}</strong>
+                    <div className="candidate-copy">
+                      <strong>{candidate.name}</strong>
+                      <DeltaBadge
+                        value={getLatestCandidateDelta(candidate.name, candidate.value, previousData)}
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="ranking-meter">
@@ -331,7 +603,7 @@ function App() {
           </div>
 
           <div className="recent-list">
-            {(data?.lastCounted ?? []).map((entry) => (
+            {(current?.lastCounted ?? []).map((entry) => (
               <div className="recent-item" key={`${entry.NombreMesaElectoral}-${entry.HoraEscrutada}`}>
                 <div className="recent-main">
                   <strong>{entry.NombreMesaElectoral}</strong>
@@ -345,107 +617,254 @@ function App() {
 
       <section className="panel">
         <div className="panel-heading">
-          <h2>Resultado por colectivo</h2>
-          <span>Comparativa A, B, C y D</span>
+          <h2>Participación 2026 vs 2022</h2>
+          <span>Comparativa a las 14:00 y al último corte disponible</span>
         </div>
 
-        <div className="group-grid">
-          {(data?.resultsByGroup ?? []).map((group) => (
-            <div className="group-block" key={group.group}>
-              <h3>Grupo {group.group}</h3>
-              {group.results.map((candidate) => (
-                <div className="group-row" key={`${group.group}-${candidate.name}`}>
-                  <span>{candidate.name}</span>
-                  <strong>{formatPercent(candidate.value)}</strong>
+        <div className="compare-grid">
+          <ComparisonRow
+            label="Total · último corte"
+            current={current?.turnoutPct ?? 0}
+            previous={historical?.turnoutPct ?? 0}
+            currentLabel="2026"
+            previousLabel="2022"
+          />
+          <ComparisonRow
+            label="Total · 14:00"
+            current={current?.turnout14Pct ?? 0}
+            previous={historical?.turnout14Pct ?? 0}
+            currentLabel="2026"
+            previousLabel="2022"
+          />
+        </div>
+
+        <div className="turnout-grid">
+          {(current?.turnoutByGroup ?? []).map((group) => {
+            const historicalGroup = historical?.turnoutByGroup?.find((item) => item.group === group.group);
+            return (
+              <div className="turnout-card flash-target" key={group.group}>
+                <div className="turnout-card-head">
+                  <h3>{group.group === "Total" ? "Total" : `Grupo ${group.group}`}</h3>
+                  <DeltaBadge value={getDelta(group.current, historicalGroup?.current)} />
+                </div>
+                <div className="turnout-metric">
+                  <span>2026 · último corte</span>
+                  <strong>{formatPercent(group.current)}</strong>
+                </div>
+                <div className="turnout-metric">
+                  <span>2022 · último corte</span>
+                  <strong>{formatPercent(historicalGroup?.current)}</strong>
+                </div>
+                <div className="turnout-metric turnover-muted">
+                  <span>2026 · 14:00</span>
+                  <strong>{formatPercent(group.at14h)}</strong>
+                </div>
+                <div className="turnout-metric turnover-muted">
+                  <span>2022 · 14:00</span>
+                  <strong>{formatPercent(historicalGroup?.at14h)}</strong>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {viewMode === "full" && (
+        <>
+          <section className="panel">
+            <div className="panel-heading">
+              <h2>Resultado por colectivo</h2>
+              <span>Comparativa A, B, C y D</span>
+            </div>
+
+            <div className="group-grid">
+              {(current?.resultsByGroup ?? []).map((group) => (
+                <div className="group-block flash-target" key={group.group}>
+                  <h3>Grupo {group.group}</h3>
+                  {group.results.map((candidate) => (
+                    <div className="group-row" key={`${group.group}-${candidate.name}`}>
+                      <span>{candidate.name}</span>
+                      <strong>{formatPercent(candidate.value)}</strong>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
-          ))}
-        </div>
-      </section>
+          </section>
 
-      <section className="content-grid content-grid-large">
-        <article className="panel">
-          <div className="panel-heading">
-            <h2>Mesas electorales</h2>
-            <span>{filteredTables.length} mesas visibles</span>
-          </div>
+          <section className="content-grid content-grid-large">
+            <article className="panel">
+              <div className="panel-heading">
+                <h2>Mesas electorales</h2>
+                <span>{filteredTables.length} mesas visibles</span>
+              </div>
 
-          <div className="toolbar">
-            <input
-              className="search-input"
-              type="search"
-              placeholder="Buscar por facultad o mesa"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={showCountedOnly}
-                onChange={(event) => setShowCountedOnly(event.target.checked)}
-              />
-              <span>Solo escrutadas</span>
-            </label>
-          </div>
+              <div className="toolbar toolbar-wrap">
+                <input
+                  className="search-input"
+                  type="search"
+                  placeholder="Buscar por facultad o mesa"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+                <select
+                  className="select-input"
+                  value={tableSort}
+                  onChange={(event) => setTableSort(event.target.value)}
+                >
+                  <option value="alphabetical">Orden alfabético</option>
+                  <option value="votes">Más votos</option>
+                  <option value="turnout">Más participación</option>
+                  <option value="counted">Escrutadas primero</option>
+                </select>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={showCountedOnly}
+                    onChange={(event) => setShowCountedOnly(event.target.checked)}
+                  />
+                  <span>Solo escrutadas</span>
+                </label>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={showWithVotesOnly}
+                    onChange={(event) => setShowWithVotesOnly(event.target.checked)}
+                  />
+                  <span>Solo con votos</span>
+                </label>
+              </div>
 
-          <div className="table-list">
-            {filteredTables.map((table) => (
-              <div className="table-item" key={table.name}>
-                <div className="table-item-head">
-                  <div>
-                    <strong>{table.name}</strong>
-                    <span>{table.groups.join(" · ")}</span>
+              <div className="table-list">
+                {filteredTables.map((table) => (
+                  <div className="table-item flash-target" key={table.name}>
+                    <div className="table-item-head">
+                      <div>
+                        <strong>{table.name}</strong>
+                        <span>{table.groups.join(" · ")}</span>
+                      </div>
+                      <div className={table.counted ? "badge-counted" : "badge-pending"}>
+                        {table.counted ? "Escrutada" : "Pendiente"}
+                      </div>
+                    </div>
+
+                    <div className="table-item-meta table-item-meta-grid">
+                      <span>{formatInteger(table.totalVotes)} votos registrados</span>
+                      <span>Participación final: {formatPercent(table.turnoutPct)}</span>
+                    </div>
+
+                    {table.results.length > 0 ? (
+                      <div className="chips">
+                        {table.results.slice(0, 8).map((result) => (
+                          <span className="chip" key={`${table.name}-${result.key}`}>
+                            {result.key}: {formatInteger(result.value)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="empty-text">Sin votos publicados todavía.</p>
+                    )}
                   </div>
-                  <div className={table.counted ? "badge-counted" : "badge-pending"}>
-                    {table.counted ? "Escrutada" : "Pendiente"}
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-heading">
+                <h2>Participación destacada</h2>
+                <span>Top 10 mesas por participación final</span>
+              </div>
+
+              <div className="participation-list">
+                {topFaculties.map((faculty) => (
+                  <div className="participation-item flash-target" key={faculty.name}>
+                    <div className="participation-main">
+                      <strong>{faculty.name}</strong>
+                      <span>{faculty.groups}</span>
+                    </div>
+                    <div className="participation-stats">
+                      <span>{formatPercent(faculty.pctFinal)}</span>
+                      <small>
+                        {formatInteger(faculty.votedFinal)} / {formatInteger(faculty.census)}
+                      </small>
+                    </div>
                   </div>
-                </div>
+                ))}
+              </div>
+            </article>
+          </section>
 
-                <div className="table-item-meta">
-                  <span>{formatInteger(table.totalVotes)} votos registrados</span>
-                </div>
+          <section className="panel">
+            <div className="panel-heading">
+              <h2>Desglose completo por mesa y grupo</h2>
+              <span>Tabla integral de candidaturas, blancos y nulos</span>
+            </div>
 
-                {table.results.length > 0 ? (
-                  <div className="chips">
-                    {table.results.slice(0, 6).map((result) => (
-                      <span className="chip" key={`${table.name}-${result.key}`}>
-                        {result.key}: {formatInteger(result.value)}
-                      </span>
+            <div className="wide-table-shell">
+              <table className="votes-table">
+                <thead>
+                  <tr>
+                    <th rowSpan="2" className="sticky-col sticky-head">
+                      Mesa
+                    </th>
+                    {(current?.detailedVotesTable?.columns ?? []).map((column) => (
+                      <th
+                        key={column.code}
+                        colSpan={4}
+                        className="candidate-col-head"
+                        title={column.name}
+                      >
+                        {column.photo ? <img src={column.photo} alt={column.name} className="table-photo" /> : null}
+                        <span>{column.name}</span>
+                      </th>
                     ))}
-                  </div>
-                ) : (
-                  <p className="empty-text">Sin votos publicados todavía.</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article className="panel">
-          <div className="panel-heading">
-            <h2>Participación destacada</h2>
-            <span>Top 10 mesas por participación final</span>
-          </div>
-
-          <div className="participation-list">
-            {topFaculties.map((faculty) => (
-              <div className="participation-item" key={faculty.name}>
-                <div className="participation-main">
-                  <strong>{faculty.name}</strong>
-                  <span>{faculty.groups}</span>
-                </div>
-                <div className="participation-stats">
-                  <span>{formatPercent(faculty.pctFinal)}</span>
-                  <small>
-                    {formatInteger(faculty.votedFinal)} / {formatInteger(faculty.census)}
-                  </small>
-                </div>
-              </div>
-            ))}
-          </div>
-        </article>
-      </section>
+                  </tr>
+                  <tr>
+                    {(current?.detailedVotesTable?.columns ?? []).flatMap((column) =>
+                      GROUP_ORDER.map((group) => (
+                        <th key={`${column.code}-${group}`} className="group-col-head">
+                          {group}
+                        </th>
+                      ))
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDetailedRows.map((row) => (
+                    <tr key={row.name}>
+                      <th className="sticky-col">
+                        <div className="table-row-head">
+                          <span>{row.name}</span>
+                          <small>{row.counted ? "Escrutada" : "Pendiente"}</small>
+                        </div>
+                      </th>
+                      {(current?.detailedVotesTable?.columns ?? []).flatMap((column) =>
+                        GROUP_ORDER.map((group) => (
+                          <td key={`${row.name}-${column.code}-${group}`}>
+                            {formatCellValue(row.cells[column.code][group])}
+                          </td>
+                        ))
+                      )}
+                    </tr>
+                  ))}
+                  {current?.detailedVotesTable ? (
+                    <tr className="totals-row">
+                      <th className="sticky-col">Totales</th>
+                      {current.detailedVotesTable.columns.flatMap((column) =>
+                        GROUP_ORDER.map((group) => (
+                          <td key={`total-${column.code}-${group}`}>
+                            {formatInteger(current.detailedVotesTable.totals[column.code][group])}
+                          </td>
+                        ))
+                      )}
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
     </main>
   );
 }
