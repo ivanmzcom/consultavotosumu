@@ -293,7 +293,7 @@ function App() {
       </section>
 
       <section className="content-grid">
-        <article className="panel">
+        <article className="panel recent-panel">
           <div className="panel-heading">
             <h2>Resultado global</h2>
             <span>Distribución porcentual por candidatura</span>
@@ -333,7 +333,7 @@ function App() {
           <div className="recent-list">
             {(data?.lastCounted ?? []).map((entry) => (
               <div className="recent-item" key={`${entry.NombreMesaElectoral}-${entry.HoraEscrutada}`}>
-                <div>
+                <div className="recent-main">
                   <strong>{entry.NombreMesaElectoral}</strong>
                 </div>
                 <span className="recent-time">{entry.HoraEscrutada}</span>
