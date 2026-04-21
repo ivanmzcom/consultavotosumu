@@ -357,6 +357,7 @@ function App() {
   const [theme, setTheme] = useState(getInitialTheme);
   const [flash, setFlash] = useState(false);
   const previousRef = useRef(null);
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -427,6 +428,27 @@ function App() {
 
   const current = data?.current;
   const historical = data?.historical;
+  const currentLeader = current?.candidateResults?.[0]?.name ?? "";
+  const previousLeader = previousData?.current?.candidateResults?.[0]?.name ?? "";
+
+  useEffect(() => {
+    if (!currentLeader) {
+      return;
+    }
+
+    if (!hasLoadedOnceRef.current) {
+      hasLoadedOnceRef.current = true;
+      return;
+    }
+
+    if (!previousLeader || previousLeader === currentLeader) {
+      return;
+    }
+
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate([90, 50, 90]);
+    }
+  }, [currentLeader, previousLeader]);
 
   const filteredTables = useMemo(() => {
     const tables = [...(current?.pollingTables ?? [])];
