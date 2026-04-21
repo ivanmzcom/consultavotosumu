@@ -366,6 +366,19 @@ function formatCellValue(value) {
   return formatInteger(value);
 }
 
+function formatRecentCountTime(value) {
+  if (!value) {
+    return "—";
+  }
+
+  const match = String(value).match(/(\d{1,2}:\d{2})(?::\d{2})?$/);
+  if (match) {
+    return match[1];
+  }
+
+  return String(value);
+}
+
 function DeltaBadge({ value }) {
   if (value == null) {
     return null;
@@ -801,7 +814,7 @@ function App() {
                 <div className="recent-main">
                   <strong>{entry.NombreMesaElectoral}</strong>
                 </div>
-                <span className="recent-time">{entry.HoraEscrutada}</span>
+                <span className="recent-time">{formatRecentCountTime(entry.HoraEscrutada)}</span>
               </div>
             ))}
           </div>
