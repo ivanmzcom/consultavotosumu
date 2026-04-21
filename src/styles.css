@@ -302,11 +302,14 @@ input {
   gap: 12px;
 }
 
-.ranking-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(120px, 220px) auto;
-  gap: 14px;
+.ranking-list {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 220px) 72px;
+  column-gap: 14px;
   align-items: center;
+}
+
+.ranking-row {
+  display: contents;
 }
 
 .ranking-main {
@@ -339,6 +342,7 @@ input {
 .ranking-value {
   white-space: nowrap;
   font-weight: 700;
+  text-align: right;
 }
 
 .ranking-meter {
@@ -589,6 +593,11 @@ input {
     display: grid;
     grid-template-columns: 1fr;
     gap: 10px;
+  }
+
+  .ranking-list {
+    grid-template-columns: 1fr;
+    column-gap: 0;
   }
 
   .search-input {
