@@ -5,6 +5,13 @@ const API_URL = import.meta.env.PROD
   ? "https://www.um.es/ws-siu/elecciones/elecciones_2026_1v.php"
   : "/api/elections";
 const THEME_STORAGE_KEY = "recuento-theme";
+const CANDIDATE_PHOTOS = {
+  "Juan Samuel Baixauli Soler": "https://www.um.es/documents/d/universidad/samuel_baixauli_png",
+  "María Senena Corbalán García": "https://www.um.es/documents/d/universidad/senena_corbalan_png-1",
+  "Francisco Guillermo Díaz Baños": "https://www.um.es/documents/d/universidad/guillermo_diaz_png",
+  "Alfonsa García Ayala": "https://www.um.es/documents/d/universidad/alfonsa_garcia_png",
+  "Alicia María Rubio Bañón": "https://www.um.es/documents/d/universidad/alicia_rubio_png"
+};
 
 function getInitialTheme() {
   if (typeof window === "undefined") {
@@ -45,7 +52,8 @@ function normalizeCandidateResults(entries = []) {
       const results = entry.ResultadosTotalesCandidato?.[0]?.ResultadosTotales ?? [];
       return {
         name: entry.NombreCandidato ?? results[0]?.Candidato ?? "Sin nombre",
-        value: toNumber(results[1]?.Valor)
+        value: toNumber(results[1]?.Valor),
+        photo: CANDIDATE_PHOTOS[entry.NombreCandidato ?? results[0]?.Candidato] ?? ""
       };
     })
     .sort((left, right) => right.value - left.value);
@@ -295,7 +303,17 @@ function App() {
             {(data?.candidateResults ?? []).map((candidate) => (
               <div className="ranking-row" key={candidate.name}>
                 <div className="ranking-main">
-                  <strong>{candidate.name}</strong>
+                  <div className="candidate-head">
+                    {candidate.photo ? (
+                      <img
+                        className="candidate-photo"
+                        src={candidate.photo}
+                        alt={candidate.name}
+                        loading="lazy"
+                      />
+                    ) : null}
+                    <strong>{candidate.name}</strong>
+                  </div>
                 </div>
                 <div className="ranking-meter">
                   <div style={{ width: `${candidate.value}%` }} />
