@@ -32,6 +32,71 @@ const CANDIDATE_PHOTOS = {
   "Alicia María Rubio Bañón": "https://www.um.es/documents/d/universidad/alicia_rubio_png"
 };
 
+function AppIcon({ children }) {
+  return (
+    <span className="nav-icon" aria-hidden="true">
+      {children}
+    </span>
+  );
+}
+
+function GridIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="6" height="6" rx="1.2" />
+      <rect x="14" y="4" width="6" height="6" rx="1.2" />
+      <rect x="4" y="14" width="6" height="6" rx="1.2" />
+      <rect x="14" y="14" width="6" height="6" rx="1.2" />
+    </svg>
+  );
+}
+
+function LiveIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />
+      <path d="M5 8.5a10 10 0 0 0 0 7" />
+      <path d="M19 8.5a10 10 0 0 1 0 7" />
+    </svg>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="18" cy="5.5" r="2.5" />
+      <circle cx="6" cy="12" r="2.5" />
+      <circle cx="18" cy="18.5" r="2.5" />
+      <path d="M8.3 10.9 15.7 6.6" />
+      <path d="m8.3 13.1 7.4 4.3" />
+    </svg>
+  );
+}
+
+function ThemeIcon({ theme }) {
+  if (theme === "dark") {
+    return (
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M14.7 3.2a8.8 8.8 0 1 0 6.1 11.1 7.7 7.7 0 0 1-9.8-9.8 8.7 8.7 0 0 0 3.7-1.3Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2.2" />
+      <path d="M12 19.3v2.2" />
+      <path d="M21.5 12h-2.2" />
+      <path d="M4.7 12H2.5" />
+      <path d="m18.7 5.3-1.6 1.6" />
+      <path d="m6.9 17.1-1.6 1.6" />
+      <path d="m18.7 18.7-1.6-1.6" />
+      <path d="m6.9 6.9-1.6-1.6" />
+    </svg>
+  );
+}
+
 function getInitialTheme() {
   if (typeof window === "undefined") {
     return "light";
@@ -538,50 +603,8 @@ function App() {
   return (
     <main className={appClassName}>
       <section className="hero flash-target">
-        <div className="hero-copy">
-          <p className="eyebrow">Elecciones a Rector/a y Claustro Universitario 2026</p>
-          <h1>Resultados generales 1ª vuelta</h1>
-          <p className="hero-text">
-            Universidad de Murcia. Consulta escrutinio, participación, comparativa con 2022
-            y detalle completo por mesa en tiempo real.
-          </p>
-        </div>
-
-        <div className="hero-side">
-          <div className="hero-controls">
-            <div className="segmented-control">
-              <button
-                className={viewMode === "full" ? "segmented-active" : ""}
-                type="button"
-                onClick={() => setViewMode("full")}
-              >
-                Completa
-              </button>
-              <button
-                className={viewMode === "live" ? "segmented-active" : ""}
-                type="button"
-                onClick={() => setViewMode("live")}
-              >
-                Directo
-              </button>
-            </div>
-
-            <button className="share-button" type="button" onClick={handleShare}>
-              Compartir
-            </button>
-
-            <button
-              className="theme-toggle"
-              type="button"
-              onClick={() => setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"))}
-              aria-label={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
-            >
-              <span className="theme-toggle-label">Tema</span>
-              <strong>{theme === "dark" ? "Oscuro" : "Claro"}</strong>
-            </button>
-          </div>
-
-          <div className="hero-panel">
+        <nav className="top-nav" aria-label="Controles de la aplicación">
+          <div className="hero-panel nav-status">
             <span className={`status-dot status-${status}`} />
             <span>
               {status === "loading" && "Cargando datos"}
@@ -590,6 +613,62 @@ function App() {
               {status === "error" && "Error de actualización"}
             </span>
           </div>
+
+          <div className="hero-controls">
+            <div className="segmented-control segmented-text" aria-label="Modo de vista">
+              <button
+                className={viewMode === "full" ? "segmented-active" : ""}
+                type="button"
+                onClick={() => setViewMode("full")}
+                aria-label="Vista completa"
+                title="Vista completa"
+              >
+                Completa
+              </button>
+              <button
+                className={viewMode === "live" ? "segmented-active" : ""}
+                type="button"
+                onClick={() => setViewMode("live")}
+                aria-label="Vista en directo"
+                title="Vista en directo"
+              >
+                Directo
+              </button>
+            </div>
+
+            <button
+              className="share-button icon-button"
+              type="button"
+              onClick={handleShare}
+              aria-label="Compartir"
+              title="Compartir"
+            >
+              <AppIcon>
+                <ShareIcon />
+              </AppIcon>
+            </button>
+
+            <button
+              className="theme-toggle icon-button"
+              type="button"
+              onClick={() => setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"))}
+              aria-label={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
+              title={`Tema ${theme === "dark" ? "oscuro" : "claro"}`}
+            >
+              <AppIcon>
+                <ThemeIcon theme={theme} />
+              </AppIcon>
+            </button>
+          </div>
+        </nav>
+
+        <div className="hero-copy">
+          <p className="eyebrow">Elecciones a Rector/a y Claustro Universitario 2026</p>
+          <h1>Resultados generales 1ª vuelta</h1>
+          <p className="hero-text">
+            Universidad de Murcia. Consulta escrutinio, participación, comparativa con 2022
+            y detalle completo por mesa en tiempo real.
+          </p>
         </div>
       </section>
 
