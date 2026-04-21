@@ -84,8 +84,39 @@ input {
   border-bottom: 1px solid var(--line);
 }
 
-:root[data-theme="dark"] .top-nav {
-  background: transparent;
+.top-nav-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nav-menu-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.72);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.nav-menu-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(158, 61, 33, 0.35);
+}
+
+.nav-menu-open {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .hero {
@@ -242,7 +273,8 @@ input {
 
 :root[data-theme="dark"] .hero-panel,
 :root[data-theme="dark"] .theme-toggle,
-:root[data-theme="dark"] .share-button {
+:root[data-theme="dark"] .share-button,
+:root[data-theme="dark"] .nav-menu-button {
   background: rgba(18, 22, 28, 0.76);
 }
 
@@ -871,6 +903,11 @@ input {
   flex: 0 0 auto;
 }
 
+.hero-icon-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .nav-status {
   flex: 0 1 auto;
   width: fit-content;
@@ -1278,20 +1315,34 @@ input {
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 960px) {
   .top-nav {
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
+  }
+
+  .top-nav-header {
+    justify-content: space-between;
+  }
+
+  .nav-menu-button {
+    display: inline-flex;
   }
 
   .hero-controls {
+    display: none;
     flex-direction: column;
     justify-content: stretch;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+
+  .hero-controls-open {
+    display: flex;
   }
 
   .segmented-control,
-  .share-button,
-  .theme-toggle,
   .select-input {
     flex: none;
     width: 100%;
@@ -1302,8 +1353,20 @@ input {
     width: 100%;
   }
 
-  .icon-button {
+  .hero-icon-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-icon-actions .icon-button {
     width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .top-nav {
+    margin-bottom: 2px;
+    padding-bottom: 12px;
   }
 
   .compare-bar-group {

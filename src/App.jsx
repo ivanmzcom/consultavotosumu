@@ -97,6 +97,16 @@ function ThemeIcon({ theme }) {
   );
 }
 
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </svg>
+  );
+}
+
 function getInitialTheme() {
   if (typeof window === "undefined") {
     return "light";
@@ -422,6 +432,7 @@ function App() {
   const [tableSort, setTableSort] = useState("alphabetical");
   const [viewMode, setViewMode] = useState("full");
   const [mobileCandidateTab, setMobileCandidateTab] = useState("C1");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
   const [flash, setFlash] = useState(false);
   const previousRef = useRef(null);
@@ -432,6 +443,23 @@ function App() {
     document.documentElement.style.colorScheme = theme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 960px)");
+    const handleViewportChange = (event) => {
+      if (!event.matches) {
+        setMobileNavOpen(false);
+      }
+    };
+
+    handleViewportChange(mediaQuery);
+    mediaQuery.addEventListener("change", handleViewportChange);
+    return () => mediaQuery.removeEventListener("change", handleViewportChange);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -604,22 +632,40 @@ function App() {
     <main className={appClassName}>
       <section className="hero flash-target">
         <nav className="top-nav" aria-label="Controles de la aplicación">
-          <div className="hero-panel nav-status">
-            <span className={`status-dot status-${status}`} />
-            <span>
-              {status === "loading" && "Cargando datos"}
-              {status === "refreshing" && "Actualizando"}
-              {status === "ready" && `Última actualización: ${current?.updatedAt ?? "sin dato"}`}
-              {status === "error" && "Error de actualización"}
-            </span>
+          <div className="top-nav-header">
+            <div className="hero-panel nav-status">
+              <span className={`status-dot status-${status}`} />
+              <span>
+                {status === "loading" && "Cargando datos"}
+                {status === "refreshing" && "Actualizando"}
+                {status === "ready" && `Última actualización: ${current?.updatedAt ?? "sin dato"}`}
+                {status === "error" && "Error de actualización"}
+              </span>
+            </div>
+
+            <button
+              className={`nav-menu-button ${mobileNavOpen ? "nav-menu-open" : ""}`}
+              type="button"
+              aria-label={mobileNavOpen ? "Cerrar menú" : "Abrir menú"}
+              aria-expanded={mobileNavOpen}
+              aria-controls="hero-controls"
+              onClick={() => setMobileNavOpen((currentOpen) => !currentOpen)}
+            >
+              <AppIcon>
+                <MenuIcon />
+              </AppIcon>
+            </button>
           </div>
 
-          <div className="hero-controls">
+          <div className={`hero-controls ${mobileNavOpen ? "hero-controls-open" : ""}`} id="hero-controls">
             <div className="segmented-control segmented-text" aria-label="Modo de vista">
               <button
                 className={viewMode === "full" ? "segmented-active" : ""}
                 type="button"
-                onClick={() => setViewMode("full")}
+                onClick={() => {
+                  setViewMode("full");
+                  setMobileNavOpen(false);
+                }}
                 aria-label="Vista completa"
                 title="Vista completa"
               >
@@ -628,7 +674,10 @@ function App() {
               <button
                 className={viewMode === "live" ? "segmented-active" : ""}
                 type="button"
-                onClick={() => setViewMode("live")}
+                onClick={() => {
+                  setViewMode("live");
+                  setMobileNavOpen(false);
+                }}
                 aria-label="Vista en directo"
                 title="Vista en directo"
               >
@@ -636,39 +685,43 @@ function App() {
               </button>
             </div>
 
-            <button
-              className="share-button icon-button"
-              type="button"
-              onClick={handleShare}
-              aria-label="Compartir"
-              title="Compartir"
-            >
-              <AppIcon>
-                <ShareIcon />
-              </AppIcon>
-            </button>
+            <div className="hero-icon-actions">
+              <button
+                className="share-button icon-button"
+                type="button"
+                onClick={async () => {
+                  await handleShare();
+                  setMobileNavOpen(false);
+                }}
+                aria-label="Compartir"
+                title="Compartir"
+              >
+                <AppIcon>
+                  <ShareIcon />
+                </AppIcon>
+              </button>
 
-            <button
-              className="theme-toggle icon-button"
-              type="button"
-              onClick={() => setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"))}
-              aria-label={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
-              title={`Tema ${theme === "dark" ? "oscuro" : "claro"}`}
-            >
-              <AppIcon>
-                <ThemeIcon theme={theme} />
-              </AppIcon>
-            </button>
+              <button
+                className="theme-toggle icon-button"
+                type="button"
+                onClick={() => {
+                  setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
+                  setMobileNavOpen(false);
+                }}
+                aria-label={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
+                title={`Tema ${theme === "dark" ? "oscuro" : "claro"}`}
+              >
+                <AppIcon>
+                  <ThemeIcon theme={theme} />
+                </AppIcon>
+              </button>
+            </div>
           </div>
         </nav>
 
         <div className="hero-copy">
           <p className="eyebrow">Elecciones a Rector/a y Claustro Universitario 2026</p>
           <h1>Resultados generales 1ª vuelta</h1>
-          <p className="hero-text">
-            Universidad de Murcia. Consulta escrutinio, participación, comparativa con 2022
-            y detalle completo por mesa en tiempo real.
-          </p>
         </div>
       </section>
 
