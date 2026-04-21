@@ -14,6 +14,13 @@ const CURRENT_API_URL = import.meta.env.PROD
 const HISTORICAL_API_URL = "https://www.um.es/ws-siu/elecciones/elecciones_1v.php";
 const THEME_STORAGE_KEY = "recuento-theme";
 const GROUP_ORDER = ["A", "B", "C", "D"];
+const OFFICIAL_CANDIDATE_ORDER = [
+  { code: "C1", name: "Juan Samuel Baixauli Soler" },
+  { code: "C2", name: "María Senena Corbalán García" },
+  { code: "C3", name: "Francisco Guillermo Díaz Baños" },
+  { code: "C4", name: "Alfonsa García Ayala" },
+  { code: "C5", name: "Alicia María Rubio Bañón" }
+];
 const CANDIDATE_PHOTOS = {
   "Juan Samuel Baixauli Soler": "https://www.um.es/documents/d/universidad/samuel_baixauli_png",
   "María Senena Corbalán García": "https://www.um.es/documents/d/universidad/senena_corbalan_png-1",
@@ -143,10 +150,11 @@ function normalizePollingTables(entries = [], participationByFaculty = []) {
 }
 
 function buildDetailedVotesTable(entries = [], candidateResults = []) {
-  const candidateColumns = candidateResults.map((candidate, index) => ({
-    code: `C${index + 1}`,
+  const candidateLookup = new Map(candidateResults.map((candidate) => [candidate.name, candidate]));
+  const candidateColumns = OFFICIAL_CANDIDATE_ORDER.map((candidate) => ({
+    code: candidate.code,
     name: candidate.name,
-    photo: candidate.photo
+    photo: candidateLookup.get(candidate.name)?.photo ?? CANDIDATE_PHOTOS[candidate.name] ?? ""
   }));
   const extraColumns = [
     { code: "W", name: "Blancos", photo: "" },
