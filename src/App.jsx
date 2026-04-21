@@ -4,6 +4,20 @@ const REFRESH_MS = 15_000;
 const API_URL = import.meta.env.PROD
   ? "https://www.um.es/ws-siu/elecciones/elecciones_2026_1v.php"
   : "/api/elections";
+const THEME_STORAGE_KEY = "recuento-theme";
+
+function getInitialTheme() {
+  if (typeof window === "undefined") {
+    return "light";
+  }
+
+  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (storedTheme === "light" || storedTheme === "dark") {
+    return storedTheme;
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 function toNumber(value) {
   if (value === "" || value == null) {
@@ -138,6 +152,13 @@ function App() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [showCountedOnly, setShowCountedOnly] = useState(false);
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     let active = true;
@@ -215,14 +236,26 @@ function App() {
           </p>
         </div>
 
-        <div className="hero-panel">
-          <span className={`status-dot status-${status}`} />
-          <span>
-            {status === "loading" && "Cargando datos"}
-            {status === "refreshing" && "Actualizando"}
-            {status === "ready" && `Última actualización: ${data?.updatedAt ?? "sin dato"}`}
-            {status === "error" && "Error de actualización"}
-          </span>
+        <div className="hero-side">
+          <button
+            className="theme-toggle"
+            type="button"
+            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+            aria-label={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
+          >
+            <span className="theme-toggle-label">Tema</span>
+            <strong>{theme === "dark" ? "Oscuro" : "Claro"}</strong>
+          </button>
+
+          <div className="hero-panel">
+            <span className={`status-dot status-${status}`} />
+            <span>
+              {status === "loading" && "Cargando datos"}
+              {status === "refreshing" && "Actualizando"}
+              {status === "ready" && `Última actualización: ${data?.updatedAt ?? "sin dato"}`}
+              {status === "error" && "Error de actualización"}
+            </span>
+          </div>
         </div>
       </section>
 
