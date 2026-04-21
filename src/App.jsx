@@ -314,8 +314,6 @@ function SummaryCard({ label, value, hint, delta }) {
 }
 
 function ComparisonRow({ label, current, previous, currentLabel, previousLabel }) {
-  const maxValue = Math.max(current, previous, 1);
-
   return (
     <div className="compare-row flash-target">
       <div className="compare-head">
@@ -326,14 +324,17 @@ function ComparisonRow({ label, current, previous, currentLabel, previousLabel }
         <div className="compare-bar-group">
           <span>{currentLabel}</span>
           <div className="compare-meter">
-            <div className="compare-meter-current" style={{ width: `${(current / maxValue) * 100}%` }} />
+            <div className="compare-meter-current" style={{ width: `${Math.max(0, Math.min(current, 100))}%` }} />
           </div>
           <strong>{formatPercent(current)}</strong>
         </div>
         <div className="compare-bar-group">
           <span>{previousLabel}</span>
           <div className="compare-meter">
-            <div className="compare-meter-previous" style={{ width: `${(previous / maxValue) * 100}%` }} />
+            <div
+              className="compare-meter-previous"
+              style={{ width: `${Math.max(0, Math.min(previous, 100))}%` }}
+            />
           </div>
           <strong>{formatPercent(previous)}</strong>
         </div>
@@ -352,6 +353,7 @@ function App() {
   const [showWithVotesOnly, setShowWithVotesOnly] = useState(false);
   const [tableSort, setTableSort] = useState("alphabetical");
   const [viewMode, setViewMode] = useState("full");
+  const [mobileCandidateTab, setMobileCandidateTab] = useState("C1");
   const [theme, setTheme] = useState(getInitialTheme);
   const [flash, setFlash] = useState(false);
   const previousRef = useRef(null);
@@ -808,7 +810,7 @@ function App() {
               <span>Tabla integral de candidaturas, blancos y nulos</span>
             </div>
 
-            <div className="wide-table-shell">
+            <div className="wide-table-shell desktop-only">
               <table className="votes-table">
                 <thead>
                   <tr>
@@ -869,6 +871,73 @@ function App() {
                   ) : null}
                 </tbody>
               </table>
+            </div>
+
+            <div className="mobile-breakdown mobile-only">
+              <div className="mobile-tabbar">
+                {(current?.detailedVotesTable?.columns ?? []).map((column) => (
+                  <button
+                    key={column.code}
+                    type="button"
+                    className={mobileCandidateTab === column.code ? "mobile-tab mobile-tab-active" : "mobile-tab"}
+                    onClick={() => setMobileCandidateTab(column.code)}
+                  >
+                    {column.name}
+                  </button>
+                ))}
+              </div>
+
+              {(current?.detailedVotesTable?.columns ?? [])
+                .filter((column) => column.code === mobileCandidateTab)
+                .map((column) => (
+                  <article className="mobile-breakdown-card flash-target" key={`mobile-tab-${column.code}`}>
+                    <div className="mobile-breakdown-head">
+                      <div className="mobile-candidate-head">
+                        {column.photo ? (
+                          <img src={column.photo} alt={column.name} className="mobile-candidate-photo" />
+                        ) : null}
+                        <div>
+                          <strong>{column.name}</strong>
+                          <small>Votos por mesa y grupo</small>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mobile-mesa-list">
+                      {filteredDetailedRows.map((row) => (
+                        <section className="mobile-mesa-item" key={`${column.code}-${row.name}`}>
+                          <div className="mobile-mesa-head">
+                            <strong>{row.name}</strong>
+                            <small>{row.counted ? "Escrutada" : "Pendiente"}</small>
+                          </div>
+                          <div className="mobile-group-values">
+                            {GROUP_ORDER.map((group) => (
+                              <div className="mobile-group-row" key={`${column.code}-${row.name}-${group}`}>
+                                <span>{group}</span>
+                                <strong>{formatCellValue(row.cells[column.code][group]) || "—"}</strong>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+
+                    <section className="mobile-mesa-item totals-card">
+                      <div className="mobile-mesa-head">
+                        <strong>Totales</strong>
+                        <small>Acumulado por grupo</small>
+                      </div>
+                      <div className="mobile-group-values">
+                        {GROUP_ORDER.map((group) => (
+                          <div className="mobile-group-row" key={`totals-${column.code}-${group}`}>
+                            <span>{group}</span>
+                            <strong>{formatInteger(current?.detailedVotesTable?.totals[column.code][group])}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  </article>
+                ))}
             </div>
           </section>
         </>
