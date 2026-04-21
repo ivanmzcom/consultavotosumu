@@ -78,7 +78,7 @@ input {
   grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
   gap: 24px;
   align-items: end;
-  padding: 40px;
+  padding: 28px 30px;
   border: 1px solid var(--line);
   border-radius: 28px;
   background:
@@ -106,10 +106,10 @@ input {
 }
 
 .eyebrow {
-  margin: 0 0 14px;
+  margin: 0 0 10px;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  font-size: 0.68rem;
 }
 
 .hero h1,
@@ -121,16 +121,16 @@ input {
 }
 
 .hero h1 {
-  max-width: 11ch;
-  font-size: clamp(2.5rem, 5vw, 5.4rem);
-  line-height: 0.94;
+  max-width: 16ch;
+  font-size: clamp(2rem, 3.4vw, 3.5rem);
+  line-height: 1;
 }
 
 .hero-text {
-  max-width: 60ch;
-  margin: 22px 0 0;
-  font-size: 1.02rem;
-  line-height: 1.6;
+  max-width: 52ch;
+  margin: 12px 0 0;
+  font-size: 0.96rem;
+  line-height: 1.45;
   color: #3c342c;
 }
 
@@ -150,7 +150,7 @@ input {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 18px 20px;
+  padding: 14px 16px;
   border-radius: 18px;
   border: 1px solid var(--line);
   background: rgba(255, 252, 247, 0.7);
@@ -158,7 +158,7 @@ input {
 
 .hero-side {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .theme-toggle {
@@ -167,7 +167,7 @@ input {
   align-items: center;
   gap: 14px;
   width: 100%;
-  padding: 16px 18px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(255, 252, 247, 0.72);
@@ -605,13 +605,13 @@ input {
 
   .hero h1 {
     max-width: none;
-    font-size: clamp(2.2rem, 13vw, 2.9rem);
+    font-size: clamp(1.9rem, 11vw, 2.4rem);
     line-height: 0.98;
   }
 
   .hero-text {
-    margin-top: 18px;
-    font-size: 0.96rem;
+    margin-top: 10px;
+    font-size: 0.92rem;
   }
 
   .panel-heading,
@@ -753,8 +753,8 @@ input {
 
   .eyebrow,
   .summary-label {
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
   }
 
   .summary-grid {

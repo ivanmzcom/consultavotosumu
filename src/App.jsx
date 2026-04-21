@@ -236,11 +236,11 @@ function App() {
     <main className="app-shell">
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">Universidad de Murcia · Elecciones 2026 · 1ª vuelta</p>
-          <h1>Recuento en directo con lectura operativa del escrutinio.</h1>
+          <p className="eyebrow">Elecciones a Rector/a y Claustro Universitario 2026</p>
+          <h1>Resultados generales 1ª vuelta</h1>
           <p className="hero-text">
-            Consulta el porcentaje escrutado, la participación, los resultados por candidatura
-            y el detalle por mesa en una sola vista.
+            Universidad de Murcia. Consulta escrutinio, participación y detalle por mesa
+            en tiempo real.
           </p>
         </div>
 
