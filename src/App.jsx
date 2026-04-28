@@ -870,21 +870,21 @@ function App() {
       <section className="panel">
         <div className="panel-heading">
           <h2>Participación 2ª vuelta vs 1ª vuelta</h2>
-          <span>Comparativa a las 14:00 y al último corte disponible</span>
+          <span>Comparativa a las 14:00 y a las 18:30</span>
         </div>
 
         <div className="compare-grid">
           <ComparisonRow
-            label="Total · último corte"
-            current={current?.turnoutPct ?? 0}
-            previous={historical?.turnoutPct ?? 0}
+            label="Total · 14:00"
+            current={current?.turnout14Pct ?? 0}
+            previous={historical?.turnout14Pct ?? 0}
             currentLabel="2ª vuelta"
             previousLabel="1ª vuelta"
           />
           <ComparisonRow
-            label="Total · 14:00"
-            current={current?.turnout14Pct ?? 0}
-            previous={historical?.turnout14Pct ?? 0}
+            label="Total · 18:30"
+            current={current?.turnoutPct ?? 0}
+            previous={historical?.turnoutPct ?? 0}
             currentLabel="2ª vuelta"
             previousLabel="1ª vuelta"
           />
@@ -899,14 +899,6 @@ function App() {
                   <h3>{group.group === "Total" ? "Total" : `Grupo ${group.group}`}</h3>
                   <DeltaBadge value={getDelta(group.current, historicalGroup?.current)} />
                 </div>
-                <div className="turnout-metric">
-                  <span>2ª vuelta · último corte</span>
-                  <strong>{formatPercent(group.current)}</strong>
-                </div>
-                <div className="turnout-metric">
-                  <span>1ª vuelta · último corte</span>
-                  <strong>{formatPercent(historicalGroup?.current)}</strong>
-                </div>
                 <div className="turnout-metric turnover-muted">
                   <span>2ª vuelta · 14:00</span>
                   <strong>{formatPercent(group.at14h)}</strong>
@@ -914,6 +906,14 @@ function App() {
                 <div className="turnout-metric turnover-muted">
                   <span>1ª vuelta · 14:00</span>
                   <strong>{formatPercent(historicalGroup?.at14h)}</strong>
+                </div>
+                <div className="turnout-metric">
+                  <span>2ª vuelta · 18:30</span>
+                  <strong>{formatPercent(group.current)}</strong>
+                </div>
+                <div className="turnout-metric">
+                  <span>1ª vuelta · 18:30</span>
+                  <strong>{formatPercent(historicalGroup?.current)}</strong>
                 </div>
               </div>
             );
