@@ -3,16 +3,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PORT = Number(process.env.PORT || 3001);
-const API_URL = "https://www.um.es/ws-siu/elecciones/elecciones_2026_1v.php";
+const CURRENT_API_URL = "https://www.um.es/ws-siu/elecciones/elecciones_2026_2v.php";
+const HISTORICAL_API_URL = "https://www.um.es/ws-siu/elecciones/elecciones_2026_1v.php";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distPath = path.join(__dirname, "dist");
 
 const app = express();
 
-app.get("/api/elections", async (_req, res) => {
+async function proxyElection(url, res) {
   try {
-    const upstream = await fetch(API_URL, {
+    const upstream = await fetch(url, {
       headers: {
         Accept: "application/json, text/plain, */*",
         "X-Requested-With": "XMLHttpRequest"
@@ -35,6 +36,14 @@ app.get("/api/elections", async (_req, res) => {
       detail: error instanceof Error ? error.message : String(error)
     });
   }
+}
+
+app.get("/api/elections-2v", async (_req, res) => {
+  await proxyElection(CURRENT_API_URL, res);
+});
+
+app.get("/api/elections-1v", async (_req, res) => {
+  await proxyElection(HISTORICAL_API_URL, res);
 });
 
 app.use(express.static(distPath));

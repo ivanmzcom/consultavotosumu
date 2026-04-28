@@ -9,20 +9,19 @@ import {
 
 const REFRESH_MS = 15_000;
 const CURRENT_API_URL = import.meta.env.PROD
+  ? "https://www.um.es/ws-siu/elecciones/elecciones_2026_2v.php"
+  : "/api/elections-2v";
+const HISTORICAL_API_URL = import.meta.env.PROD
   ? "https://www.um.es/ws-siu/elecciones/elecciones_2026_1v.php"
-  : "/api/elections";
-const HISTORICAL_API_URL = "https://www.um.es/ws-siu/elecciones/elecciones_1v.php";
+  : "/api/elections-1v";
 const THEME_STORAGE_KEY = "recuento-theme";
 const GROUP_ORDER = ["A", "B", "C", "D"];
 const REPO_URL = "https://github.com/ivanmzcom/consultavotosumu";
 const OFFICIAL_RESULTS_URL =
-  "https://www.um.es/web/universidad/elecciones/2026/resultados-primera-vuelta";
+  "https://www.um.es/web/universidad/elecciones/2026/resultados-segunda-vuelta";
 const OFFICIAL_CANDIDATE_ORDER = [
   { code: "C1", name: "Juan Samuel Baixauli Soler" },
-  { code: "C2", name: "María Senena Corbalán García" },
-  { code: "C3", name: "Francisco Guillermo Díaz Baños" },
-  { code: "C4", name: "Alfonsa García Ayala" },
-  { code: "C5", name: "Alicia María Rubio Bañón" }
+  { code: "C2", name: "Alicia María Rubio Bañón" }
 ];
 const CANDIDATE_PHOTOS = {
   "Juan Samuel Baixauli Soler": "https://www.um.es/documents/d/universidad/samuel_baixauli_png",
@@ -175,6 +174,16 @@ function normalizeResultsByGroup(entries = []) {
   }));
 }
 
+function resolveLatestValue(...values) {
+  for (const value of values) {
+    if (value !== "" && value != null) {
+      return toNumber(value);
+    }
+  }
+
+  return 0;
+}
+
 function normalizeParticipation(entries = []) {
   return entries
     .map((entry) => ({
@@ -185,6 +194,8 @@ function normalizeParticipation(entries = []) {
       votedFinal: toNumber(entry.VotantesFinal),
       pct14h: toNumber(entry.ParticipacionPct14h),
       pctFinal: toNumber(entry.ParticipacionPctFinal),
+      votedLatest: resolveLatestValue(entry.VotantesFinal, entry.Votantes14h),
+      pctLatest: resolveLatestValue(entry.ParticipacionPctFinal, entry.ParticipacionPct14h),
       countedAt: entry.Escrutada,
       validatedAt: entry.Validada,
       breakdown: Object.entries(entry.DesgloseGrupos ?? {}).map(([group, values]) => ({
@@ -193,10 +204,12 @@ function normalizeParticipation(entries = []) {
         voted14h: toNumber(values.Votantes14h),
         votedFinal: toNumber(values.VotantesFinal),
         pct14h: toNumber(values.ParticipacionPct14h),
-        pctFinal: toNumber(values.ParticipacionPctFinal)
+        pctFinal: toNumber(values.ParticipacionPctFinal),
+        votedLatest: resolveLatestValue(values.VotantesFinal, values.Votantes14h),
+        pctLatest: resolveLatestValue(values.ParticipacionPctFinal, values.ParticipacionPct14h)
       }))
     }))
-    .sort((left, right) => right.pctFinal - left.pctFinal);
+    .sort((left, right) => right.pctLatest - left.pctLatest);
 }
 
 function normalizePollingTables(entries = [], participationByFaculty = []) {
@@ -213,7 +226,7 @@ function normalizePollingTables(entries = [], participationByFaculty = []) {
       counted: table.escrutada === "si",
       groups,
       totalVotes,
-      turnoutPct: participation?.pctFinal ?? 0,
+      turnoutPct: participation?.pctLatest ?? 0,
       turnout14Pct: participation?.pct14h ?? 0,
       results: rawResults
         .map((result) => ({
@@ -283,6 +296,39 @@ function extractElection(payload) {
 
   const candidateResults = normalizeCandidateResults(election.ResultadosTotalesCandidatoGrafica);
   const participationByFaculty = normalizeParticipation(election.ParticipacionFacultades ?? []);
+  const turnoutLatest = resolveLatestValue(
+    election.ParticipacionTotal?.[0]?.ParticipaciongrupoTotal,
+    election.ParticipacionTotal18?.[0]?.ParticipaciongrupoTotal,
+    election.ParticipacionTotal14?.[0]?.ParticipaciongrupoTotal
+  );
+  const turnoutLatestByGroup = {
+    Total: turnoutLatest,
+    PDI: resolveLatestValue(
+      election.ParticipacionPDI?.[0]?.ParticipaciongrupoPDI,
+      election.ParticipacionPDI18?.[0]?.ParticipaciongrupoPDI,
+      election.ParticipacionPDI14?.[0]?.ParticipaciongrupoPDI
+    ),
+    A: resolveLatestValue(
+      election.ParticipacionA?.[0]?.ParticipaciongrupoA,
+      election.ParticipacionA18?.[0]?.ParticipaciongrupoA,
+      election.ParticipacionA14?.[0]?.ParticipaciongrupoA
+    ),
+    B: resolveLatestValue(
+      election.ParticipacionB?.[0]?.ParticipaciongrupoB,
+      election.ParticipacionB18?.[0]?.ParticipaciongrupoB,
+      election.ParticipacionB14?.[0]?.ParticipaciongrupoB
+    ),
+    C: resolveLatestValue(
+      election.ParticipacionC?.[0]?.ParticipaciongrupoC,
+      election.ParticipacionC18?.[0]?.ParticipaciongrupoC,
+      election.ParticipacionC14?.[0]?.ParticipaciongrupoC
+    ),
+    D: resolveLatestValue(
+      election.ParticipacionD?.[0]?.ParticipaciongrupoD,
+      election.ParticipacionD18?.[0]?.ParticipaciongrupoD,
+      election.ParticipacionD14?.[0]?.ParticipaciongrupoD
+    )
+  };
 
   return {
     year: rootKey.replace("EleccionesRector", ""),
@@ -290,37 +336,37 @@ function extractElection(payload) {
     countedPct: toNumber(election.VotoEscrutado?.[0]?.PorcentajeTotalEscrutado),
     totalCensus: toNumber(election.VotoEscrutado?.[0]?.TotalCensados),
     totalVotes: toNumber(election.VotoEscrutado?.[0]?.TotalCensadosQueHanVotado),
-    turnoutPct: toNumber(election.ParticipacionTotal?.[0]?.ParticipaciongrupoTotal),
+    turnoutPct: turnoutLatest,
     turnout14Pct: toNumber(election.ParticipacionTotal14?.[0]?.ParticipaciongrupoTotal),
     turnoutByGroup: [
       {
         group: "Total",
-        current: toNumber(election.ParticipacionTotal?.[0]?.ParticipaciongrupoTotal),
+        current: turnoutLatestByGroup.Total,
         at14h: toNumber(election.ParticipacionTotal14?.[0]?.ParticipaciongrupoTotal)
       },
       {
         group: "PDI",
-        current: toNumber(election.ParticipacionPDI?.[0]?.ParticipaciongrupoPDI),
+        current: turnoutLatestByGroup.PDI,
         at14h: toNumber(election.ParticipacionPDI14?.[0]?.ParticipaciongrupoPDI)
       },
       {
         group: "A",
-        current: toNumber(election.ParticipacionA?.[0]?.ParticipaciongrupoA),
+        current: turnoutLatestByGroup.A,
         at14h: toNumber(election.ParticipacionA14?.[0]?.ParticipaciongrupoA)
       },
       {
         group: "B",
-        current: toNumber(election.ParticipacionB?.[0]?.ParticipaciongrupoB),
+        current: turnoutLatestByGroup.B,
         at14h: toNumber(election.ParticipacionB14?.[0]?.ParticipaciongrupoB)
       },
       {
         group: "C",
-        current: toNumber(election.ParticipacionC?.[0]?.ParticipaciongrupoC),
+        current: turnoutLatestByGroup.C,
         at14h: toNumber(election.ParticipacionC14?.[0]?.ParticipaciongrupoC)
       },
       {
         group: "D",
-        current: toNumber(election.ParticipacionD?.[0]?.ParticipaciongrupoD),
+        current: turnoutLatestByGroup.D,
         at14h: toNumber(election.ParticipacionD14?.[0]?.ParticipaciongrupoD)
       }
     ],
@@ -622,8 +668,8 @@ function App() {
   async function handleShare() {
     const shareUrl = typeof window !== "undefined" ? window.location.href : REPO_URL;
     const payload = {
-      title: "Resultados generales 1ª vuelta · Universidad de Murcia",
-      text: "Web no oficial para consultar el recuento de las elecciones UMU 2026.",
+      title: "Resultados generales 2ª vuelta · Universidad de Murcia",
+      text: "Web no oficial para consultar el recuento de la segunda vuelta de las elecciones UMU 2026.",
       url: shareUrl
     };
 
@@ -734,7 +780,7 @@ function App() {
 
         <div className="hero-copy">
           <p className="eyebrow">Elecciones a Rector/a y Claustro Universitario 2026</p>
-          <h1>Resultados generales 1ª vuelta</h1>
+          <h1>Resultados generales 2ª vuelta</h1>
         </div>
       </section>
 
@@ -823,7 +869,7 @@ function App() {
 
       <section className="panel">
         <div className="panel-heading">
-          <h2>Participación 2026 vs 2022</h2>
+          <h2>Participación 2ª vuelta vs 1ª vuelta</h2>
           <span>Comparativa a las 14:00 y al último corte disponible</span>
         </div>
 
@@ -832,15 +878,15 @@ function App() {
             label="Total · último corte"
             current={current?.turnoutPct ?? 0}
             previous={historical?.turnoutPct ?? 0}
-            currentLabel="2026"
-            previousLabel="2022"
+            currentLabel="2ª vuelta"
+            previousLabel="1ª vuelta"
           />
           <ComparisonRow
             label="Total · 14:00"
             current={current?.turnout14Pct ?? 0}
             previous={historical?.turnout14Pct ?? 0}
-            currentLabel="2026"
-            previousLabel="2022"
+            currentLabel="2ª vuelta"
+            previousLabel="1ª vuelta"
           />
         </div>
 
@@ -854,19 +900,19 @@ function App() {
                   <DeltaBadge value={getDelta(group.current, historicalGroup?.current)} />
                 </div>
                 <div className="turnout-metric">
-                  <span>2026 · último corte</span>
+                  <span>2ª vuelta · último corte</span>
                   <strong>{formatPercent(group.current)}</strong>
                 </div>
                 <div className="turnout-metric">
-                  <span>2022 · último corte</span>
+                  <span>1ª vuelta · último corte</span>
                   <strong>{formatPercent(historicalGroup?.current)}</strong>
                 </div>
                 <div className="turnout-metric turnover-muted">
-                  <span>2026 · 14:00</span>
+                  <span>2ª vuelta · 14:00</span>
                   <strong>{formatPercent(group.at14h)}</strong>
                 </div>
                 <div className="turnout-metric turnover-muted">
-                  <span>2022 · 14:00</span>
+                  <span>1ª vuelta · 14:00</span>
                   <strong>{formatPercent(historicalGroup?.at14h)}</strong>
                 </div>
               </div>
@@ -956,7 +1002,7 @@ function App() {
 
                     <div className="table-item-meta table-item-meta-grid">
                       <span>{formatInteger(table.totalVotes)} votos registrados</span>
-                      <span>Participación final: {formatPercent(table.turnoutPct)}</span>
+                      <span>Participación disponible: {formatPercent(table.turnoutPct)}</span>
                     </div>
 
                     {table.results.length > 0 ? (
